@@ -1,0 +1,71 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.40">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@1.7.2"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@1.7.2">
+      <jobProperties>
+        <string>org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty</string>
+      </jobProperties>
+      <triggers/>
+      <parameters>
+        <string>CODE_BRANCH</string>
+      </parameters>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.jira.JiraProjectProperty plugin="jira@3.1.1"/>
+    <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty/>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition plugin="git-parameter@0.9.13">
+          <name>CODE_BRANCH</name>
+          <description>Code branch...</description>
+          <uuid>0e60bb95-4a06-41de-87f6-0e7ce8e5b390</uuid>
+          <type>PT_BRANCH</type>
+          <branch></branch>
+          <tagFilter>*</tagFilter>
+          <branchFilter>origin/(.*)</branchFilter>
+          <sortMode>ASCENDING_SMART</sortMode>
+          <defaultValue>develop</defaultValue>
+          <selectedValue>NONE</selectedValue>
+          <quickFilterEnabled>true</quickFilterEnabled>
+          <listSize>5</listSize>
+        </net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.83">
+    <script>// Test repo clone from GitHub
+pipeline {
+    agent any
+    options { 
+		disableConcurrentBuilds()
+		timestamps()
+	}
+	parameters {
+      gitParameter branch: &apos;&apos;, branchFilter: &apos;origin/(.*)&apos;, defaultValue: &apos;develop&apos;, description: &apos;Code branch...&apos;, name: &apos;CODE_BRANCH&apos;, quickFilterEnabled: true, selectedValue: &apos;NONE&apos;, sortMode: &apos;ASCENDING_SMART&apos;, tagFilter: &apos;*&apos;, type: &apos;PT_BRANCH&apos;
+    }
+	
+	stages {
+        stage(&apos;Assemble&apos;){
+            steps{
+				echo &apos;===== ^^^^^ Cleaning working directory...&apos;
+				dir(&apos;aem&apos;){
+					deleteDir()
+				}
+				echo &apos;===== ^^^^^ Retrieving AEM source code...&apos;
+				dir(&apos;aem&apos;){
+				    git credentialsId: &apos;github-pat-simplyhealth-machine-user-jenkins&apos;, url: &apos;https://github.com/simplyhealth/aem.git&apos;, branch: &apos;develop&apos;
+				}
+			}
+		}
+	}
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

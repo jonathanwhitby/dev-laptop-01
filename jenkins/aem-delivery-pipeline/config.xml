@@ -1,0 +1,118 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.40">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@1.7.2"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@1.7.2">
+      <jobProperties>
+        <string>org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty</string>
+      </jobProperties>
+      <triggers/>
+      <parameters>
+        <string>CODE_BRANCH</string>
+      </parameters>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description>Assemble AEM zip file and publish to local Nexus 3</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.jira.JiraProjectProperty plugin="jira@3.1.1"/>
+    <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty/>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition plugin="git-parameter@0.9.13">
+          <name>CODE_BRANCH</name>
+          <description></description>
+          <uuid>469efc44-b8db-4d36-9b17-571cf4eae288</uuid>
+          <type>PT_BRANCH</type>
+          <branch></branch>
+          <tagFilter>*</tagFilter>
+          <branchFilter>origin/(.*)</branchFilter>
+          <sortMode>ASCENDING_SMART</sortMode>
+          <defaultValue>develop</defaultValue>
+          <selectedValue>NONE</selectedValue>
+          <quickFilterEnabled>true</quickFilterEnabled>
+          <listSize>5</listSize>
+        </net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.83">
+    <script>// AEM delivery pipeline - DEV
+def version
+
+pipeline {
+    agent none
+    options { 
+		disableConcurrentBuilds()
+		timestamps()
+	}
+	environment {
+		NPM_TOKEN = credentials(&apos;npm_token&apos;)
+		FILE_PATH = &quot;${env.WORKSPACE}/aem/simplyhealth-components&quot;
+	}
+	parameters {
+		gitParameter branch: &apos;&apos;, branchFilter: &apos;origin/(.*)&apos;, defaultValue: &apos;develop&apos;, description: &apos;&apos;, name: &apos;CODE_BRANCH&apos;, quickFilterEnabled: true, selectedValue: &apos;NONE&apos;, sortMode: &apos;ASCENDING_SMART&apos;, tagFilter: &apos;*&apos;, type: &apos;PT_BRANCH&apos;
+	}
+
+    stages {
+        stage(&apos;Assemble&apos;){
+			agent {label &apos;master&apos;}
+            steps{
+				echo &apos;===== ^^^^^ Cleaning working directory...&apos;
+				dir(&apos;aem&apos;){
+					deleteDir()
+				}
+				echo &apos;===== ^^^^^ Retrieving AEM source code...&apos;
+				dir(&apos;aem&apos;){
+				    git credentialsId: &apos;github-pat-simplyhealth-machine-user-jenkins&apos;, url: &apos;https://github.com/simplyhealth/aem.git&apos;, branch: &quot;${params.CODE_BRANCH}&quot;
+					
+					echo &apos;===== ^^^^^ Assembling AEM source code...&apos;
+					script {
+						env.version = readMavenPom(file: &quot;${env.WORKSPACE}/aem/pom.xml&quot;).getVersion()
+					}
+					withMaven(maven: &apos;Maven 3.3.9&apos;) {
+						sh label: &apos;Assemble&apos;, script:&apos;&apos;&apos;set +x
+														pwd
+														ls -l
+														echo .
+														export PATH=$MVN_CMD_DIR:$PATH &amp;&amp; mvn clean install
+														ls -l&apos;&apos;&apos;
+					}
+				}
+			}
+		}
+		stage(&apos;Publish&apos;){
+		    agent {label &apos;master&apos;}
+            environment {
+		        ARTIFACT_ID = readMavenPom(file: &quot;${FILE_PATH}/pom.xml&quot;).getArtifactId()
+		    }
+			steps{
+				echo &apos;===== ^^^^^ Publishing build artefact...&apos;
+
+                nexusPublisher 	nexusInstanceId: &apos;nexus3-localhost&apos;, \
+								nexusRepositoryId: &apos;maven-snapshots&apos;, \
+								packages: [[$class: &apos;MavenPackage&apos;, \
+								mavenAssetList: [[classifier: &apos;&apos;, \
+												  extension: &apos;zip&apos;, \
+												  filePath: &apos;${FILE_PATH}/target/${ARTIFACT_ID}-${env.version}.zip&apos;]], \
+												  mavenCoordinate: [artifactId: &apos;${ARTIFACT_ID}&apos;, \
+																	groupId: &apos;simplyhealth.co.uk&apos;, \
+																	packaging: &apos;zip&apos;, \
+																	version: &apos;${env.version}&apos;]]]
+			}
+		}
+    }
+    post {
+		always {
+			script{
+    		    currentBuild.displayName = &quot;v${env.version}&quot;
+		    }
+		}
+	}
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>
